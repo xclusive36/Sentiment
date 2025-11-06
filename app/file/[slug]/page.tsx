@@ -7,7 +7,9 @@ import ReactMarkdown from 'react-markdown';
 import TableOfContents from '@/components/TableOfContents';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import Backlinks from '@/components/Backlinks';
+import BlockReferences from '@/components/BlockReferences';
 import type { Backlink } from '@/lib/wikilinks';
+import type { BlockReference } from '@/lib/block-references';
 
 interface FileData {
   title: string;
@@ -16,6 +18,7 @@ interface FileData {
   tags: string[];
   aliases: string[];
   backlinks: Backlink[];
+  blocks?: BlockReference[];
   stats: { size: number; created: Date; modified: Date };
 }
 
@@ -33,11 +36,12 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
     });
   }, [params]);
 
-  // Process wiki links in content
+  // Process wiki links in content (transclusions handled server-side)
   const processedContent = useMemo(() => {
     if (!file) return '';
-    // Convert [[wiki links]] to markdown links
-    return file.content.replace(/\[\[([^\]]+)\]\]/g, (match, linkText) => {
+    
+    // Convert [[wiki links]] to markdown links (but not transclusions with !)
+    let content = file.content.replace(/(?<!!)\[\[([^\]]+)\]\]/g, (match, linkText) => {
       const [target, displayText] = linkText.includes('|')
         ? linkText.split('|').map((s: string) => s.trim())
         : [linkText.trim(), linkText.trim()];
@@ -48,6 +52,8 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
       
       return `[${displayText}](/file/${encodeURIComponent(targetPath)})`;
     });
+    
+    return content;
   }, [file, decodedPath]);
 
   useEffect(() => {
@@ -315,6 +321,16 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
                 </ReactMarkdown>
               </div>
             </article>
+            
+            {/* Block References Section */}
+            {file.blocks && (
+              <div className="mt-8">
+                <BlockReferences 
+                  blocks={file.blocks} 
+                  fileSlug={file.title}
+                />
+              </div>
+            )}
             
             <Backlinks backlinks={file.backlinks || []} />
           </div>
