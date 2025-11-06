@@ -45,3 +45,6 @@ markdown/.sentiment-order.json
 
 # sentiment statistics
 markdown/.sentiment-stats.json
+
+# sentiment saved searches
+markdown/.sentiment-searches.json
