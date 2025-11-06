@@ -83,6 +83,13 @@ export function renderWikiLinks(content: string, currentPath: string): string {
       ? linkText.split('|').map((s: string) => s.trim())
       : [linkText.trim(), linkText.trim()];
     
+    // Check if target is a date in YYYY-MM-DD format (daily note)
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (datePattern.test(target)) {
+      // Link to daily note in journal folder
+      return `[${displayText}](/file/${encodeURIComponent(`journal/${target}`)})`;
+    }
+    
     // Convert to relative path
     const targetFileName = target.endsWith('.md') ? target : `${target}.md`;
     const currentDir = currentPath.split('/').slice(0, -1).join('/');
