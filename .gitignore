@@ -51,3 +51,6 @@ markdown/.sentiment-searches.json
 
 # sentiment templates
 markdown/.sentiment-templates.json
+
+# sentiment flashcards
+.sentiment-flashcards.json
