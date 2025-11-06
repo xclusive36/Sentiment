@@ -54,3 +54,8 @@ markdown/.sentiment-templates.json
 
 # sentiment flashcards
 .sentiment-flashcards.json
+
+# sentiment database
+.sentiment-db.sqlite
+.sentiment-db.sqlite-shm
+.sentiment-db.sqlite-wal
