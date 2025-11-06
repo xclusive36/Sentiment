@@ -1,14 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import Link from 'next/link';
+import type { NoteTemplate } from '@/lib/templates';
 
 export default function NewFilePage() {
   const router = useRouter();
   const [fileName, setFileName] = useState('');
   const [showEditor, setShowEditor] = useState(false);
+  const [templates, setTemplates] = useState<NoteTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<NoteTemplate | null>(null);
+  
+  useEffect(() => {
+    fetch('/api/templates')
+      .then(res => res.json())
+      .then(data => setTemplates(data.templates || []))
+      .catch(console.error);
+  }, []);
 
   const handleSave = async (content: string) => {
     if (!fileName.trim()) {
@@ -78,6 +88,41 @@ export default function NewFilePage() {
                   Enter a name for your markdown file. The .md extension will be added automatically if not provided.
                 </p>
               </div>
+              
+              {templates.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Template (optional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setSelectedTemplate(null)}
+                      className={`p-3 rounded-lg text-left transition-colors ${
+                        !selectedTemplate
+                          ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500'
+                          : 'bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border-2 border-transparent'
+                      }`}
+                    >
+                      <div className="font-medium text-sm">📝 Blank</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Start from scratch</div>
+                    </button>
+                    {templates.slice(0, 5).map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => setSelectedTemplate(template)}
+                        className={`p-3 rounded-lg text-left transition-colors ${
+                          selectedTemplate?.id === template.id
+                            ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500'
+                            : 'bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border-2 border-transparent'
+                        }`}
+                      >
+                        <div className="font-medium text-sm">{template.icon} {template.name}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{template.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => router.push('/')}
@@ -100,11 +145,20 @@ export default function NewFilePage() {
     );
   }
 
+  const getInitialContent = () => {
+    const title = fileName.replace('.md', '');
+    if (selectedTemplate) {
+      const frontmatter = `---\ntitle: ${title}\n---\n\n`;
+      return frontmatter + `# ${title}\n\n` + selectedTemplate.bodyTemplate;
+    }
+    return `---\ntitle: ${title}\n---\n\n# ${title}\n\nStart writing your content here...`;
+  };
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <MarkdownEditor
-          initialContent={`---\ntitle: ${fileName.replace('.md', '')}\n---\n\n# ${fileName.replace('.md', '')}\n\nStart writing your content here...`}
+          initialContent={getInitialContent()}
           relativePath={fileName.endsWith('.md') ? fileName : `${fileName}.md`}
           onSave={handleSave}
           onCancel={() => setShowEditor(false)}

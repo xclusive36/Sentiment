@@ -48,3 +48,6 @@ markdown/.sentiment-stats.json
 
 # sentiment saved searches
 markdown/.sentiment-searches.json
+
+# sentiment templates
+markdown/.sentiment-templates.json
