@@ -8,7 +8,8 @@ interface SearchResult {
   title: string;
   relativePath: string;
   snippet: string;
-  matchType: 'title' | 'content';
+  matchType: 'title' | 'content' | 'alias';
+  matchedAlias?: string;
 }
 
 export default function SearchBar() {
@@ -136,6 +137,11 @@ export default function SearchBar() {
                     {result.matchType === 'title' && (
                       <span className="flex-shrink-0 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-1 rounded">
                         Title
+                      </span>
+                    )}
+                    {result.matchType === 'alias' && (
+                      <span className="flex-shrink-0 text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded">
+                        Alias: {result.matchedAlias}
                       </span>
                     )}
                   </div>

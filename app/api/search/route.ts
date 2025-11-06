@@ -27,14 +27,15 @@ export async function GET(request: NextRequest) {
 
     allFiles.push(...collectFiles(structure.folders));
 
-    // Search in title, content, and tags
+    // Search in title, content, tags, and aliases
     const results = allFiles
       .map(file => {
         const titleMatch = file.title.toLowerCase().includes(query);
         const contentMatch = file.content.toLowerCase().includes(query);
         const excerptMatch = file.excerpt.toLowerCase().includes(query);
+        const aliasMatch = file.aliases?.some(alias => alias.toLowerCase().includes(query));
 
-        if (!titleMatch && !contentMatch && !excerptMatch) {
+        if (!titleMatch && !contentMatch && !excerptMatch && !aliasMatch) {
           return null;
         }
 
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest) {
           title: file.title,
           relativePath: file.relativePath,
           snippet,
-          matchType: titleMatch ? 'title' : 'content',
+          matchType: titleMatch ? 'title' : (aliasMatch ? 'alias' : 'content'),
+          matchedAlias: aliasMatch ? file.aliases?.find(a => a.toLowerCase().includes(query)) : undefined,
         };
       })
       .filter(Boolean);

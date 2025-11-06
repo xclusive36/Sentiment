@@ -11,6 +11,7 @@ export interface FileData {
   excerpt: string;
   relativePath: string;
   tags: string[];
+  aliases: string[];
   stats: {
     size: number;
     created: Date;
@@ -50,6 +51,16 @@ function getFileData(filePath: string, relativePath: string): FileData {
     }
   }
 
+  // Extract aliases from frontmatter
+  let aliases: string[] = [];
+  if (data.aliases) {
+    if (Array.isArray(data.aliases)) {
+      aliases = data.aliases.map(alias => String(alias).trim());
+    } else if (typeof data.aliases === 'string') {
+      aliases = data.aliases.split(',').map(alias => alias.trim());
+    }
+  }
+
   return {
     id: relativePath,
     slug: fileName,
@@ -58,6 +69,7 @@ function getFileData(filePath: string, relativePath: string): FileData {
     excerpt: excerpt.substring(0, 150) + (excerpt.length > 150 ? '...' : ''),
     relativePath,
     tags,
+    aliases,
     stats: {
       size: stats.size,
       created: stats.birthtime,

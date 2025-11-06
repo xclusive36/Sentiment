@@ -1,4 +1,5 @@
 import { FileData, FileStructure } from './files';
+import { findFileByTitleOrAlias } from './aliases';
 
 export interface WikiLink {
   text: string;
@@ -77,7 +78,8 @@ export function findBacklinks(targetPath: string, structure: FileStructure): Bac
 }
 
 // Convert wiki links to actual links in HTML
-export function renderWikiLinks(content: string, currentPath: string): string {
+// Now supports alias resolution
+export function renderWikiLinks(content: string, currentPath: string, structure?: FileStructure): string {
   return content.replace(/\[\[([^\]]+)\]\]/g, (match, linkText) => {
     const [target, displayText] = linkText.includes('|')
       ? linkText.split('|').map((s: string) => s.trim())
@@ -90,7 +92,15 @@ export function renderWikiLinks(content: string, currentPath: string): string {
       return `[${displayText}](/file/${encodeURIComponent(`journal/${target}`)})`;
     }
     
-    // Convert to relative path
+    // Try to resolve via alias if structure is provided
+    if (structure) {
+      const resolvedFile = findFileByTitleOrAlias(target, structure);
+      if (resolvedFile) {
+        return `[${displayText}](/file/${encodeURIComponent(resolvedFile.relativePath.replace('.md', ''))})`;
+      }
+    }
+    
+    // Fallback: Convert to relative path
     const targetFileName = target.endsWith('.md') ? target : `${target}.md`;
     const currentDir = currentPath.split('/').slice(0, -1).join('/');
     const targetPath = currentDir ? `${currentDir}/${targetFileName}` : targetFileName;
