@@ -169,6 +169,15 @@ export default function HomePageClient({ initialStructure, allTags }: HomePageCl
                 </svg>
                 New File
               </Link>
+              <Link
+                href="/sync"
+                className="px-4 py-2 text-sm font-medium bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5 9A7.5 7.5 0 0119.5 9m-15 6A7.5 7.5 0 0019.5 15" />
+                </svg>
+                Sync
+              </Link>
             </div>
           </div>
           <div className="flex items-center justify-between mb-6">
