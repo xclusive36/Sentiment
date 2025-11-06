@@ -59,6 +59,12 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
           setFile(null);
         } else {
           setFile(data);
+          // Record file access for statistics
+          fetch('/api/stats/record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: decodedPath }),
+          }).catch(() => {}); // Silently fail if stats recording fails
         }
         setIsLoading(false);
       })

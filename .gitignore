@@ -42,3 +42,6 @@ next-env.d.ts
 
 # sentiment order config
 markdown/.sentiment-order.json
+
+# sentiment statistics
+markdown/.sentiment-stats.json
