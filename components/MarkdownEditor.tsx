@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import CodeMirror from '@uiw/react-codemirror';
+import { markdown } from '@codemirror/lang-markdown';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { EditorStatePersistence } from '@/lib/editor-state';
 
 interface MarkdownEditorProps {
   initialContent: string;
   relativePath: string;
   onSave: (content: string) => Promise<void>;
   onCancel: () => void;
+  isDistraction?: boolean;
 }
 
 export default function MarkdownEditor({
@@ -15,15 +20,77 @@ export default function MarkdownEditor({
   relativePath,
   onSave,
   onCancel,
+  isDistraction = false,
 }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent);
-  const [isPreview, setIsPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
+  const [charCount, setCharCount] = useState(0);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isDistractionFree, setIsDistractionFree] = useState(isDistraction);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load editor state on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const state = EditorStatePersistence.getState(relativePath);
+    if (state.scrollPosition && editorContainerRef.current) {
+      editorContainerRef.current.scrollTop = state.scrollPosition;
+    }
+    
+    // Add to recent files
+    const title = relativePath.split('/').pop()?.replace('.md', '') || relativePath;
+    EditorStatePersistence.addRecentFile(relativePath, title);
+    
+    // Cleanup old states on mount
+    EditorStatePersistence.cleanupOldStates();
+  }, [relativePath]);
+
+  // Calculate word and character counts
+  useEffect(() => {
+    const words = content.trim().split(/\s+/).filter(word => word.length > 0).length;
+    setWordCount(content.trim() === '' ? 0 : words);
+    setCharCount(content.length);
+  }, [content]);
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
+    if (content !== initialContent) {
+      autoSaveTimeoutRef.current = setTimeout(async () => {
+        try {
+          await onSave(content);
+          setLastSaved(new Date());
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+        }
+      }, 2000); // Auto-save after 2 seconds of inactivity
+    }
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [content, initialContent, onSave]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await onSave(content);
+      setLastSaved(new Date());
+      
+      // Save scroll position
+      if (editorContainerRef.current) {
+        EditorStatePersistence.saveState(relativePath, {
+          scrollPosition: editorContainerRef.current.scrollTop,
+        });
+      }
     } catch (error) {
       console.error('Error saving:', error);
       alert('Failed to save file. Please try again.');
@@ -32,73 +99,229 @@ export default function MarkdownEditor({
     }
   };
 
+  const insertMarkdown = useCallback((prefix: string, suffix = '') => {
+    const textarea = document.querySelector('.cm-content') as HTMLTextAreaElement;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    const newText = content.substring(0, start) + prefix + selectedText + suffix + content.substring(end);
+    
+    setContent(newText);
+  }, [content]);
+
+  const formatLastSaved = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    
+    if (minutes < 1) return 'just now';
+    if (minutes === 1) return '1 minute ago';
+    if (minutes < 60) return `${minutes} minutes ago`;
+    
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  if (isDistractionFree) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white dark:bg-slate-900">
+        <div className="h-full flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setIsDistractionFree(false)}
+                className="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <span className="text-sm text-slate-500">{wordCount} words • {charCount} characters</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {lastSaved && (
+                <span className="text-sm text-slate-400">
+                  Saved {formatLastSaved(lastSaved)}
+                </span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+          <div className="flex-1">
+            <CodeMirror
+              value={content}
+              onChange={(val) => setContent(val)}
+              extensions={[markdown()]}
+              theme={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? oneDark : undefined}
+              className="h-full"
+              basicSetup={{
+                lineNumbers: false,
+                foldGutter: false,
+                dropCursor: true,
+                allowMultipleSelections: true,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightSelectionMatches: false,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-      <div className="border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
-        <div>
+      <div className="border-b border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-            Edit: {relativePath}
+            {relativePath}
           </h2>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>{wordCount} words</span>
+              <span>•</span>
+              <span>{charCount} characters</span>
+              {lastSaved && (
+                <>
+                  <span>•</span>
+                  <span>Saved {formatLastSaved(lastSaved)}</span>
+                </>
+              )}
+            </div>
             <button
-              onClick={() => setIsPreview(false)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                !isPreview
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}
+              onClick={() => setIsDistractionFree(true)}
+              className="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded"
+              title="Distraction-free mode"
             >
-              Edit
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
             </button>
             <button
-              onClick={() => setIsPreview(true)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                isPreview
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}
+              onClick={onCancel}
+              className="px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
             >
-              Preview
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save
+                </>
+              )}
             </button>
           </div>
+        </div>
+        
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            onClick={() => insertMarkdown('**', '**')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="Bold"
           >
-            Cancel
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1 4 4 4 4 0 0 1-4 4H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 5V7h6a2 2 0 0 1 2 2 2 2 0 0 1-2 2H8zm0 6v-2h8a2 2 0 0 1 2 2 2 2 0 0 1-2 2H8z"/>
+            </svg>
           </button>
           <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            onClick={() => insertMarkdown('*', '*')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="Italic"
           >
-            {isSaving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Save
-              </>
-            )}
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4h-8z"/>
+            </svg>
+          </button>
+          <button
+            onClick={() => insertMarkdown('[', '](url)')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="Link"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </button>
+          <button
+            onClick={() => insertMarkdown('`', '`')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="Code"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => insertMarkdown('## ')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="Heading"
+          >
+            H2
+          </button>
+          <button
+            onClick={() => insertMarkdown('- ')}
+            className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+            title="List"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </button>
         </div>
       </div>
 
-      <div className="p-6">
-        {isPreview ? (
-          <div className="prose prose-slate dark:prose-invert max-w-none min-h-[500px]">
+      {/* Split pane editor */}
+      <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-700 h-[600px]">
+        {/* Editor pane */}
+        <div className="p-4">
+          <CodeMirror
+            value={content}
+            onChange={(val) => setContent(val)}
+            extensions={[markdown()]}
+            theme={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? oneDark : undefined}
+            height="100%"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              dropCursor: true,
+              allowMultipleSelections: true,
+              indentOnInput: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              autocompletion: true,
+              highlightSelectionMatches: false,
+            }}
+          />
+        </div>
+        
+        {/* Preview pane */}
+        <div className="p-4 overflow-y-auto">
+          <div className="prose prose-slate dark:prose-invert max-w-none">
             <ReactMarkdown
               components={{
                 h1: ({ children }) => (
@@ -139,14 +362,7 @@ export default function MarkdownEditor({
               {content}
             </ReactMarkdown>
           </div>
-        ) : (
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full min-h-[500px] p-4 font-mono text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-            placeholder="Write your markdown here..."
-          />
-        )}
+        </div>
       </div>
     </div>
   );

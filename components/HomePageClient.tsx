@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { FileStructure } from '@/lib/files';
 import FileList from '@/components/FileList';
 import SearchBar from '@/components/SearchBar';
 import FileUpload from '@/components/FileUpload';
 import TagFilter from '@/components/TagFilter';
 import RecentFiles from '@/components/RecentFiles';
+import QuickEditor from '@/components/QuickEditor';
+import CommandPalette from '@/components/CommandPalette';
+import FloatingActionButton from '@/components/FloatingActionButton';
+import CollapsibleSidebar from '@/components/CollapsibleSidebar';
+import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import Link from 'next/link';
 
 interface HomePageClientProps {
@@ -16,6 +21,30 @@ interface HomePageClientProps {
 
 export default function HomePageClient({ initialStructure, allTags }: HomePageClientProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [recentFilesKey, setRecentFilesKey] = useState(0);
+
+  // Refresh recent files when page becomes visible (user returns to home)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setRecentFilesKey(prev => prev + 1);
+      }
+    };
+
+    const handleFileChanged = () => {
+      setRecentFilesKey(prev => prev + 1);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('file-changed', handleFileChanged);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('file-changed', handleFileChanged);
+    };
+  }, []);
   
   // Filter files by tags
   const structure = useMemo(() => {
@@ -46,164 +75,144 @@ export default function HomePageClient({ initialStructure, allTags }: HomePageCl
   const totalItems = structure.files.length + structure.folders.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto px-4 py-8">
-        <header className="mb-12">
-          <h1 className="text-5xl font-bold text-slate-900 dark:text-white mb-4">
-            📁 Sentiment
-          </h1>
-          <p className="text-xl text-slate-600 dark:text-slate-300 mb-6">
-            File Management & Storage Dashboard
-          </p>
-          <div className="flex items-center gap-3 mb-6">
-            <Link
-              href="/study"
-              className="px-4 py-2 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              Study
+    <>
+      <KeyboardShortcuts onCommandPalette={() => setIsCommandPaletteOpen(true)} />
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        structure={structure}
+      />
+      <FloatingActionButton />
+      
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+        {/* Simplified Header */}
+        <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700">
+          <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-slate-900 dark:text-white">📝 Sentiment</span>
             </Link>
-            <Link
-              href="/graph"
-              className="px-4 py-2 text-sm font-medium bg-pink-500 hover:bg-pink-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-              </svg>
-              Graph
-            </Link>
-            <Link
-              href="/tags"
-              className="px-4 py-2 text-sm font-medium bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-              </svg>
-              Tags
-            </Link>
-            <Link
-              href="/timeline"
-              className="px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Timeline
-            </Link>
-            <Link
-              href="/searches"
-              className="px-4 py-2 text-sm font-medium bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Saved Searches
-            </Link>
-            <Link
-              href="/insights"
-              className="px-4 py-2 text-sm font-medium bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Insights
-            </Link>
-          </div>
-          <SearchBar />
-        </header>
-
-        <FileUpload />
-
-        {/* Recent & Frequent Files */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Recently Viewed
-            </h3>
-            <RecentFiles type="recent" limit={5} />
-          </div>
-          
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-              Most Accessed
-            </h3>
-            <RecentFiles type="frequent" limit={5} />
-          </div>
-        </div>
-
-        <TagFilter 
-          allTags={allTags}
-          selectedTags={selectedTags}
-          onTagsChange={setSelectedTags}
-        />
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">
-              Markdown Files
-            </h2>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/journal"
-                className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Daily Journal
-              </Link>
+            
+            <div className="flex-1 max-w-2xl mx-8">
+              <SearchBar />
+            </div>
+            
+            <div className="flex items-center gap-2">
               <Link
                 href="/new"
-                className="px-4 py-2 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                className="px-3 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                New File
+                New
               </Link>
-              <Link
-                href="/sync"
-                className="px-4 py-2 text-sm font-medium bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              
+              <button
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className="px-3 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-colors flex items-center gap-2"
+                title="Command Palette (Ctrl/Cmd+P)"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5 9A7.5 7.5 0 0119.5 9m-15 6A7.5 7.5 0 0019.5 15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Sync
-              </Link>
-            </div>
-          </div>
-          <div className="flex items-center justify-between mb-6">
-            <div />
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                {structure.folders.length} {structure.folders.length === 1 ? 'folder' : 'folders'}, {structure.files.length} {structure.files.length === 1 ? 'file' : 'files'}
-              </span>
-              {totalItems > 0 && (
-                <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-3 py-1 rounded-full flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+              </button>
+              
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                  title="Menu"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                   </svg>
-                  Drag to reorder or into folders
-                </span>
-              )}
+                </button>
+                
+                {showMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-2 z-50">
+                    <Link href="/journal" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      📅 Daily Journal
+                    </Link>
+                    <Link href="/graph" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      🕸️ Knowledge Graph
+                    </Link>
+                    <Link href="/tags" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      🏷️ Tags Browser
+                    </Link>
+                    <Link href="/timeline" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      ⏰ Timeline
+                    </Link>
+                    <Link href="/study" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      📚 Study Flashcards
+                    </Link>
+                    <Link href="/searches" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      🔍 Saved Searches
+                    </Link>
+                    <Link href="/insights" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      📊 Insights
+                    </Link>
+                    <Link href="/sync" className="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setShowMenu(false)}>
+                      🔄 Sync Settings
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        </header>
 
-          <FileList initialStructure={structure} />
+        {/* Main Content Area with Sidebar */}
+        <div className="container mx-auto px-4 py-8">
+          {/* Quick Editor - Prominently Featured */}
+          <div className="mb-8">
+            <QuickEditor />
+          </div>
+          
+          {/* Recent Files - Compact */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-4">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Recently Viewed
+              </h3>
+              <RecentFiles key={`recent-${recentFilesKey}`} type="recent" limit={5} />
+            </div>
+            
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-4">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                Most Accessed
+              </h3>
+              <RecentFiles key={`frequent-${recentFilesKey}`} type="frequent" limit={5} />
+            </div>
+          </div>
         </div>
 
-        <footer className="text-center text-slate-500 dark:text-slate-400 text-sm">
-          <p>Sentiment - Next.js File Management Dashboard</p>
-        </footer>
+        {/* Collapsible File Browser Sidebar */}
+        <CollapsibleSidebar title="Files" defaultOpen={false}>
+          <FileUpload />
+          
+          <TagFilter 
+            allTags={allTags}
+            selectedTags={selectedTags}
+            onTagsChange={setSelectedTags}
+          />
+          
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {structure.folders.length} folders, {structure.files.length} files
+              </span>
+            </div>
+            <FileList initialStructure={structure} />
+          </div>
+        </CollapsibleSidebar>
+
       </div>
-    </div>
+    </>
   );
 }

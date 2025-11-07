@@ -129,3 +129,35 @@ export function getMostAccessedFile(): FileAccessStats | null {
   const frequently = getFrequentlyAccessed(1);
   return frequently.length > 0 ? frequently[0] : null;
 }
+
+/**
+ * Delete stats for a specific file
+ */
+export function deleteFileStats(filePath: string): void {
+  const stats = loadStats();
+  
+  if (stats.fileAccess[filePath]) {
+    delete stats.fileAccess[filePath];
+    saveStats(stats);
+  }
+}
+
+/**
+ * Rename file stats (when a file is renamed/moved)
+ */
+export function renameFileStats(oldPath: string, newPath: string): void {
+  const stats = loadStats();
+  
+  if (stats.fileAccess[oldPath]) {
+    // Copy the stats to the new path
+    stats.fileAccess[newPath] = {
+      ...stats.fileAccess[oldPath],
+      path: newPath,
+    };
+    
+    // Delete the old entry
+    delete stats.fileAccess[oldPath];
+    
+    saveStats(stats);
+  }
+}

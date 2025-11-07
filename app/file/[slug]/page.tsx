@@ -8,6 +8,7 @@ import TableOfContents from '@/components/TableOfContents';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import Backlinks from '@/components/Backlinks';
 import BlockReferences from '@/components/BlockReferences';
+import MarkdownEditor from '@/components/MarkdownEditor';
 import type { Backlink } from '@/lib/wikilinks';
 import type { BlockReference } from '@/lib/block-references';
 
@@ -28,6 +29,11 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
   const [file, setFile] = useState<FileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showBacklinks, setShowBacklinks] = useState(true);
+  const [showTOC, setShowTOC] = useState(true);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
 
   // Unwrap params Promise
   useEffect(() => {
@@ -96,11 +102,74 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
         throw new Error('Failed to delete file');
       }
 
+      // Broadcast event to refresh recent files
+      window.dispatchEvent(new CustomEvent('file-changed'));
       router.push('/');
     } catch (error) {
       console.error('Error deleting file:', error);
       alert('Failed to delete file. Please try again.');
       setIsDeleting(false);
+    }
+  };
+
+  const handleSaveFromInlineEdit = async (newContent: string) => {
+    const response = await fetch('/api/files', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ relativePath: decodedPath, content: newContent }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save file');
+    }
+
+    // Refresh file data but keep editor open (both for auto-save and manual save)
+    const updatedData = await fetch(`/api/files/content?path=${encodeURIComponent(decodedPath)}`).then(res => res.json());
+    setFile(updatedData);
+    // Don't close editor - user can use Cancel button to exit
+  };
+
+  const handleRename = async () => {
+    if (!newFileName.trim()) {
+      alert('Please enter a valid filename');
+      return;
+    }
+
+    // Ensure .md extension
+    const fileName = newFileName.endsWith('.md') ? newFileName : `${newFileName}.md`;
+    
+    // Get the directory path
+    const pathParts = decodedPath.split('/');
+    const newPath = pathParts.length > 1 
+      ? [...pathParts.slice(0, -1), fileName].join('/')
+      : fileName;
+
+    if (newPath === decodedPath) {
+      setIsRenaming(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/move-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          oldPath: decodedPath, 
+          newPath: newPath 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to rename file');
+      }
+
+      // Broadcast event to refresh recent files
+      window.dispatchEvent(new CustomEvent('file-changed'));
+      // Navigate to the new path
+      router.push(`/file/${encodeURIComponent(newPath)}`);
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      alert('Failed to rename file. Please try again.');
     }
   };
 
@@ -150,21 +219,43 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_250px] gap-6">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+          {isEditMode ? (
+            <MarkdownEditor
+              initialContent={file.content}
+              relativePath={decodedPath}
+              onSave={handleSaveFromInlineEdit}
+              onCancel={() => setIsEditMode(false)}
+            />
+          ) : (
+            <>
           <div className="border-b border-slate-200 dark:border-slate-700 p-6">
             <div className="flex items-start justify-between mb-4">
               <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
                 {file.title}
               </h1>
               <div className="flex gap-2">
-                <Link
-                  href={`/file/${encodeURIComponent(decodedPath)}/edit`}
+                <button
+                  onClick={() => setIsEditMode(true)}
                   className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   Edit
-                </Link>
+                </button>
+                <button
+                  onClick={() => {
+                    const currentName = decodedPath.split('/').pop()?.replace('.md', '') || '';
+                    setNewFileName(currentName);
+                    setIsRenaming(true);
+                  }}
+                  className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Rename
+                </button>
                 <button
                   onClick={handleDelete}
                   disabled={isDeleting}
@@ -323,8 +414,17 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
             </article>
             
             {/* Block References Section */}
-            {file.blocks && (
+            {file.blocks && showBacklinks && (
               <div className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Block References</h3>
+                  <button
+                    onClick={() => setShowBacklinks(false)}
+                    className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  >
+                    Hide
+                  </button>
+                </div>
                 <BlockReferences 
                   blocks={file.blocks} 
                   fileSlug={file.title}
@@ -332,14 +432,97 @@ export default function FilePage({ params }: { params: Promise<{ slug: string }>
               </div>
             )}
             
-            <Backlinks backlinks={file.backlinks || []} />
+            {showBacklinks && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Backlinks</h3>
+                  <button
+                    onClick={() => setShowBacklinks(false)}
+                    className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <Backlinks backlinks={file.backlinks || []} />
+              </div>
+            )}
+            
+            {!showBacklinks && (
+              <button
+                onClick={() => setShowBacklinks(true)}
+                className="text-sm text-blue-500 hover:text-blue-600 mt-4"
+              >
+                Show backlinks & references
+              </button>
+            )}
+          </div>
+            </>
+          )}
+        </div>
+        {!isEditMode && (
+          <div className={`${showTOC ? 'hidden lg:block' : 'hidden'}`}>
+            <div className="sticky top-24">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Contents</h3>
+                <button
+                  onClick={() => setShowTOC(false)}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                >
+                  Hide
+                </button>
+              </div>
+              <TableOfContents content={file.content} />
+            </div>
+          </div>
+        )}
+      </div>
+      </div>
+      
+      {/* Rename Modal */}
+      {isRenaming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-4">Rename File</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                New filename
+              </label>
+              <input
+                type="text"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleRename();
+                  } else if (e.key === 'Escape') {
+                    setIsRenaming(false);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter new filename"
+                autoFocus
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                .md extension will be added automatically
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setIsRenaming(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRename}
+                className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                Rename
+              </button>
+            </div>
           </div>
         </div>
-        <div className="hidden lg:block">
-          <TableOfContents content={file.content} />
-        </div>
-      </div>
-      </div>
+      )}
     </div>
   );
 }

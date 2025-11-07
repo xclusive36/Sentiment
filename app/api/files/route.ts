@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { deleteFileStats } from '@/lib/stats';
 
 const markdownDirectory = path.join(process.cwd(), 'markdown');
 
@@ -105,6 +106,9 @@ export async function DELETE(request: NextRequest) {
 
     // Delete file
     fs.unlinkSync(fullPath);
+    
+    // Remove from stats
+    deleteFileStats(relativePath);
 
     return NextResponse.json({ success: true });
   } catch (error) {

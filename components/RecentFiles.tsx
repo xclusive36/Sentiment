@@ -77,7 +77,7 @@ export default function RecentFiles({ type, limit = 5 }: RecentFilesProps) {
         return (
           <Link
             key={file.path}
-            href={`/file/${encodeURIComponent(file.path.replace('.md', ''))}`}
+            href={`/file/${encodeURIComponent(file.path)}`}
             className="block p-3 rounded-lg bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors group"
           >
             <div className="flex items-center justify-between">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { moveFile } from '@/lib/files';
+import { renameFileStats } from '@/lib/stats';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest) {
     const success = moveFile(oldPath, newPath);
 
     if (success) {
+      // Update stats to reflect the new path
+      renameFileStats(oldPath, newPath);
       return NextResponse.json({ success: true });
     } else {
       return NextResponse.json(
