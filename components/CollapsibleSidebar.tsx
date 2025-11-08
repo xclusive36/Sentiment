@@ -37,7 +37,7 @@ export default function CollapsibleSidebar({
   }
 
   return (
-    <div className={`fixed ${position === 'left' ? 'left-0' : 'right-0'} top-0 bottom-0 z-30 w-80 bg-white dark:bg-slate-800 border-${position === 'left' ? 'r' : 'l'} border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col`}>
+    <div className="fixed inset-0 z-30 bg-white dark:bg-slate-800 overflow-hidden flex flex-col">
       <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
         <h3 className="font-semibold text-slate-900 dark:text-white">{title}</h3>
         <button

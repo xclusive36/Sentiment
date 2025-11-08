@@ -6,6 +6,8 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorStatePersistence } from '@/lib/editor-state';
+import { WYSIWYGEditor } from '@/components/WYSIWYGEditor';
+import { pluginManager } from '@/lib/plugin-system';
 
 interface MarkdownEditorProps {
   initialContent: string;
@@ -28,10 +30,11 @@ export default function MarkdownEditor({
   const [charCount, setCharCount] = useState(0);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isDistractionFree, setIsDistractionFree] = useState(isDistraction);
+  const [editorMode, setEditorMode] = useState<'markdown' | 'wysiwyg'>('markdown');
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load editor state on mount
+  // Load editor state on mount and emit file open event
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
@@ -43,6 +46,12 @@ export default function MarkdownEditor({
     // Add to recent files
     const title = relativePath.split('/').pop()?.replace('.md', '') || relativePath;
     EditorStatePersistence.addRecentFile(relativePath, title);
+    // Notify plugins of the opened file
+    try {
+      pluginManager.emit('file:open', relativePath);
+    } catch (err) {
+      console.error('Failed to emit file:open event', err);
+    }
     
     // Cleanup old states on mount
     EditorStatePersistence.cleanupOldStates();
@@ -111,6 +120,15 @@ export default function MarkdownEditor({
     setContent(newText);
   }, [content]);
 
+  const updateContent = useCallback((val: string) => {
+    setContent(val);
+    try {
+      pluginManager.emit('editor:change', val);
+    } catch (err) {
+      console.error('Failed to emit editor:change event', err);
+    }
+  }, []);
+
   const formatLastSaved = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -160,7 +178,7 @@ export default function MarkdownEditor({
           <div className="flex-1">
             <CodeMirror
               value={content}
-              onChange={(val) => setContent(val)}
+              onChange={(val) => updateContent(val)}
               extensions={[markdown()]}
               theme={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? oneDark : undefined}
               className="h-full"
@@ -240,6 +258,32 @@ export default function MarkdownEditor({
         
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Editor Mode Toggle */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded p-1 mr-2">
+            <button
+              onClick={() => setEditorMode('markdown')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                editorMode === 'markdown'
+                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Markdown Editor"
+            >
+              📝 Markdown
+            </button>
+            <button
+              onClick={() => setEditorMode('wysiwyg')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                editorMode === 'wysiwyg'
+                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="WYSIWYG Editor"
+            >
+              ✨ Rich Text
+            </button>
+          </div>
+          
           <button
             onClick={() => insertMarkdown('**', '**')}
             className="px-2 py-1 text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
@@ -295,75 +339,88 @@ export default function MarkdownEditor({
         </div>
       </div>
 
-      {/* Split pane editor */}
-      <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-700 h-[600px]">
-        {/* Editor pane */}
-        <div className="p-4">
-          <CodeMirror
-            value={content}
-            onChange={(val) => setContent(val)}
-            extensions={[markdown()]}
-            theme={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? oneDark : undefined}
-            height="100%"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              dropCursor: true,
-              allowMultipleSelections: true,
-              indentOnInput: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              highlightSelectionMatches: false,
-            }}
+      {/* Editor Area - Conditional based on mode */}
+      {editorMode === 'wysiwyg' ? (
+        /* WYSIWYG Editor */
+        <div className="p-4 min-h-[600px]">
+          <WYSIWYGEditor
+            content={content}
+            onChange={(markdown) => updateContent(markdown)}
+            placeholder="Start writing..."
+            theme="light"
           />
         </div>
-        
-        {/* Preview pane */}
-        <div className="p-4 overflow-y-auto">
-          <div className="prose prose-slate dark:prose-invert max-w-none">
-            <ReactMarkdown
-              components={{
-                h1: ({ children }) => (
-                  <h1 className="text-3xl font-bold mb-4 mt-6">{children}</h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="text-2xl font-bold mb-3 mt-5">{children}</h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-xl font-semibold mb-2 mt-4">{children}</h3>
-                ),
-                p: ({ children }) => <p className="mb-4 leading-7">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-2">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-2">{children}</ol>,
-                li: ({ children }) => <li className="leading-7">{children}</li>,
-                code: ({ children }) => (
-                  <code className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-sm font-mono">
-                    {children}
-                  </code>
-                ),
-                pre: ({ children }) => (
-                  <pre className="bg-slate-100 dark:bg-slate-900 p-4 rounded-lg overflow-x-auto mb-4">
-                    {children}
-                  </pre>
-                ),
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-4 border-blue-500 pl-4 italic my-4">
-                    {children}
-                  </blockquote>
-                ),
-                a: ({ children, href }) => (
-                  <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline">
-                    {children}
-                  </a>
-                ),
+      ) : (
+        /* Split pane markdown editor */
+        <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-700 h-[600px]">
+          {/* Editor pane */}
+          <div className="p-4">
+            <CodeMirror
+              value={content}
+              onChange={(val) => updateContent(val)}
+              extensions={[markdown()]}
+              theme={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? oneDark : undefined}
+              height="100%"
+              basicSetup={{
+                lineNumbers: true,
+                foldGutter: true,
+                dropCursor: true,
+                allowMultipleSelections: true,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightSelectionMatches: false,
               }}
-            >
-              {content}
-            </ReactMarkdown>
+            />
+          </div>
+          
+          {/* Preview pane */}
+          <div className="p-4 overflow-y-auto">
+            <div className="prose prose-slate dark:prose-invert max-w-none">
+              <ReactMarkdown
+                components={{
+                  h1: ({ children }) => (
+                    <h1 className="text-3xl font-bold mb-4 mt-6">{children}</h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-2xl font-bold mb-3 mt-5">{children}</h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-xl font-semibold mb-2 mt-4">{children}</h3>
+                  ),
+                  p: ({ children }) => <p className="mb-4 leading-7">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-2">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-2">{children}</ol>,
+                  li: ({ children }) => <li className="leading-7">{children}</li>,
+                  code: ({ children }) => (
+                    <code className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-sm font-mono">
+                      {children}
+                    </code>
+                  ),
+                  pre: ({ children }) => (
+                    <pre className="bg-slate-100 dark:bg-slate-900 p-4 rounded-lg overflow-x-auto mb-4">
+                      {children}
+                    </pre>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-blue-500 pl-4 italic my-4">
+                      {children}
+                    </blockquote>
+                  ),
+                  a: ({ children, href }) => (
+                    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline">
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {content}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
